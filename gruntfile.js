@@ -7,6 +7,7 @@ module.exports = function(grunt) {
     grunt.registerTask('sdr', 'Structured Data Validation.', function() {
 
         var filepath = grunt.option('urlSrcFile') || 'source.txt';
+        var outputPath = grunt.option('urlDstFile') || 'dest.txt';
 
         if (!grunt.file.exists(filepath)) {
             grunt.fail.warn('urlSrcFile ' + filepath + ' not found');
@@ -15,6 +16,7 @@ module.exports = function(grunt) {
         //Read source URLs from file
         var contents = grunt.file.read(filepath);
         var pageUrls = contents.split("\r\n");
+        var reports = [];
 
         var expect = function(source, field, inverse) {
             grunt.log.write(field + '...');
@@ -24,22 +26,28 @@ module.exports = function(grunt) {
 
             var isMissing = function() {
                 if (source[field] === undefined) {
+                    expect.report[field] = 'MISSING';
                     grunt.log.error('MISSING');
                     return true;
                 }
                 return false;
             };
 
-            var validate = function(equal, error) {
+            var validate = function(equal, field, error) {
                 expect.count++;
                 if ((equal && !inverse) || (!equal && inverse)) {
                     expect.passed++;
                     grunt.log.ok();
+                    expect.report[field] = 'TRUE';
                 } else {
-                    if (error)
+                    if (error){
                         grunt.log.error(error);
-                    else
+                        expect.report[field] = error;
+                    }
+                    else {
                         grunt.log.error(source[field]);
+                        expect.report[field] = 'FALSE';
+                    }
                 }
             };
 
@@ -51,26 +59,27 @@ module.exports = function(grunt) {
                 toBe: function(expectedValue) {
                     if (isMissing()) return;
                     var equal = source[field] && source[field] === expectedValue;
-                    validate(equal);
+                    validate(equal, field);
                 },
                 toMatch: function(expectedValue) {
                     if (isMissing()) return;
                     var equal = source[field] && source[field].match(expectedValue);
-                    validate(equal);
+                    validate(equal, field);
                 },
                 toBeNonEmptyString: function() {
                     if (isMissing()) return;
                     var equal = source[field] && source[field] !== '';
-                    validate(equal, 'EMPTY');
+                    validate(equal, field, 'EMPTY');
                 },
                 toBeGreaterThan: function(expectedValue) {
                     if (isMissing()) return;
                     var equal = source[field] && source[field] > expectedValue;
-                    validate(equal);
+                    validate(equal, field, expectedValue);
                 }
             }
         };
 
+        expect.report = {};
         expect.count = 0;
         expect.passed = 0;
         expect.results = function() {
@@ -86,6 +95,7 @@ module.exports = function(grunt) {
         expect.reset = function() {
             expect.count = 0;
             expect.passed = 0;
+            expect.report = {};
         };
 
         var validateUrl = function (error, response, body) {
@@ -130,6 +140,8 @@ module.exports = function(grunt) {
 
                         expect.reset();
 
+                        //console.log(response.request.uri.href);
+                        expect.report.url = response.request.uri.href;
                         expect(recipe, '@context').toMatch(/schema.org/);
                         expect(recipe, '@type').toBe('Recipe');
                         expect(recipe, 'name').toBeNonEmptyString();
@@ -154,6 +166,9 @@ module.exports = function(grunt) {
                         //expect(recipe, '').toBeNonEmptyString();
 
                         expect.results();
+
+                        //console.log(expect.report);
+                        reports.push(expect.report);
 
                         grunt.verbose.writeln(recipe);
                         //console.log(recipe);
@@ -184,6 +199,10 @@ module.exports = function(grunt) {
 
                 request(pageUrl, validateUrl);
             } else {
+                //console.log(reports);
+
+                grunt.file.write(outputPath, JSON.stringify(reports));
+
                 done();
             }
         };

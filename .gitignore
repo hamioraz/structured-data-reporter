@@ -1,3 +1,4 @@
 node_modules/
 .idea/
-source.txt
+source*.txt
+dest*.txt
