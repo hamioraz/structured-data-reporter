@@ -1,13 +1,18 @@
 var WAE = require('web-auto-extractor').default;
 var request = require('request');
 var _ = require('underscore');
+var json2csv = require('json2csv');
 
 module.exports = function(grunt) {
 
     grunt.registerTask('sdr', 'Structured Data Validation.', function() {
 
-        var filepath = grunt.option('urlSrcFile') || 'source.txt';
-        var outputPath = grunt.option('urlDstFile') || 'dest.txt';
+        //TODO: Support sitemap parsing
+        var filepath = grunt.option('urlSrcFile') || 'source.txt'; //Source
+
+        var report = grunt.option('report') || 'report'; //Destination
+        var values = grunt.option('values') || 'values'; //Destination
+        var max = grunt.option('max') || 1000; //Upper page limit
 
         if (!grunt.file.exists(filepath)) {
             grunt.fail.warn('urlSrcFile ' + filepath + ' not found');
@@ -17,6 +22,7 @@ module.exports = function(grunt) {
         var contents = grunt.file.read(filepath);
         var pageUrls = contents.split("\r\n");
         var reports = [];
+        var records = [];
 
         var expect = function(source, field, inverse) {
             grunt.log.write(field + '...');
@@ -38,14 +44,18 @@ module.exports = function(grunt) {
                 if ((equal && !inverse) || (!equal && inverse)) {
                     expect.passed++;
                     grunt.log.ok();
+
                     expect.report[field] = 'TRUE';
+
                 } else {
                     if (error){
                         grunt.log.error(error);
+
                         expect.report[field] = error;
                     }
                     else {
                         grunt.log.error(source[field]);
+
                         expect.report[field] = 'FALSE';
                     }
                 }
@@ -168,6 +178,7 @@ module.exports = function(grunt) {
                         expect.results();
 
                         //console.log(expect.report);
+                        records.push(recipe);
                         reports.push(expect.report);
 
                         grunt.verbose.writeln(recipe);
@@ -182,13 +193,16 @@ module.exports = function(grunt) {
 
             grunt.log.writeln();
             next();
+            //done();
         };
 
         var done = this.async();
 
+        var index = 0;
 
         var next = function() {
-            if (pageUrls.length > 0){
+            if (pageUrls.length > 0 && index < max){
+                index++;
                 var pageUrl = pageUrls[0];
                 pageUrls.splice(0, 1);
 
@@ -201,7 +215,14 @@ module.exports = function(grunt) {
             } else {
                 //console.log(reports);
 
-                grunt.file.write(outputPath, JSON.stringify(reports));
+                var jsonReports = JSON.stringify(reports);
+                var jsonRecords = JSON.stringify(records);
+
+                grunt.file.write(report + '.json', jsonReports);
+                grunt.file.write(values + '.json', jsonRecords);
+
+                grunt.file.write(report + '.csv', json2csv({data: reports}));
+                grunt.file.write(values + '.csv', json2csv({data: records}));
 
                 done();
             }
